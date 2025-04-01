@@ -1,9 +1,38 @@
-# HomeLab MiniCloud - Pulumi Setup Guide
+# HomeLab MiniCloud
 
-This README provides step-by-step instructions for setting up a **mini cloud environment** using **Pulumi** and **Docker** with MinIO. 
+![HomeLab MiniCloud](https://source.unsplash.com/random/1200x400/?server,cloud)
 
-## 📌 Prerequisites
-Ensure the following dependencies are installed:
+> A comprehensive guide to setting up your own mini cloud environment using Pulumi and Docker with MinIO object storage.
+
+## 📋 Table of Contents
+
+- [Overview](#overview)
+- [Prerequisites](#prerequisites)
+- [Installation](#installation)
+  - [Setting Up Pulumi](#setting-up-pulumi)
+  - [Project Setup](#project-setup)
+  - [MinIO Deployment](#minio-deployment)
+- [NGINX Configuration](#nginx-configuration)
+  - [SSL Certificate Generation](#ssl-certificate-generation)
+  - [Reverse Proxy Setup](#reverse-proxy-setup)
+- [Static Site Deployment](#static-site-deployment)
+  - [Uploading to MinIO](#uploading-to-minio)
+  - [Website Configuration](#website-configuration)
+- [Troubleshooting](#troubleshooting)
+- [Cleanup](#cleanup)
+
+## 📑 Overview
+
+HomeLab MiniCloud provides a local, containerized environment that mimics cloud services. This project uses:
+
+- **Pulumi**: Infrastructure as Code (IaC) tool to define and deploy infrastructure
+- **Docker**: For containerization of services
+- **MinIO**: S3-compatible object storage
+- **NGINX**: As a reverse proxy with SSL support
+
+## 🔧 Prerequisites
+
+Ensure you have the following installed on your system:
 
 ```bash
 sudo apt update && sudo apt install -y \
@@ -14,49 +43,63 @@ sudo apt update && sudo apt install -y \
   unzip
 ```
 
-### Install Pulumi
+## 🚀 Installation
+
+### Setting Up Pulumi
+
+1. Install Pulumi:
+
 ```bash
 curl -fsSL https://get.pulumi.com | sh
 export PATH=$PATH:$HOME/.pulumi/bin
 ```
-To persist Pulumi in your shell, add this to `~/.bashrc` or `~/.zshrc`:
+
+2. Add Pulumi to your shell configuration:
+
 ```bash
 echo 'export PATH=$HOME/.pulumi/bin:$PATH' >> ~/.bashrc
 source ~/.bashrc
 ```
 
-## 🚀 Setup Instructions
-### 1️⃣ Create Project Directory
+### Project Setup
+
+1. Create the project directory:
+
 ```bash
 mkdir -p ~/Home-Lab/Pulumi/homelab-minicloud
 cd ~/Home-Lab/Pulumi/homelab-minicloud
 ```
 
-### 2️⃣ Initialize Pulumi Project
+2. Initialize a Pulumi project:
+
 ```bash
 pulumi new python -y
 ```
-This creates a new Pulumi project with Python as the language.
 
-### 3️⃣ Install Dependencies
+3. Install dependencies:
+
 ```bash
 cd infra
 pip install -r requirements.txt
 ```
-If using a virtual environment (recommended):
+
+4. Or use a virtual environment (recommended):
+
 ```bash
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 4️⃣ Install Pulumi Docker Provider
+5. Install Pulumi Docker provider:
+
 ```bash
 pip install pulumi_docker
 ```
 
-### 5️⃣ Define MinIO Infrastructure
-Edit `infra/__main__.py` and add:
+### MinIO Deployment
+
+1. Edit `infra/__main__.py` with the following code:
 
 ```python
 """A Python Pulumi program"""
@@ -102,73 +145,36 @@ minio_container = docker.Container("minio-container",
 pulumi.export("minio_container_name", minio_container.name)
 ```
 
-### 6️⃣ Deploy MinIO
+2. Deploy MinIO:
+
 ```bash
 cd infra
 pulumi up
 ```
-This will:
-- Preview the deployment
-- Ask for confirmation
-- Deploy MinIO in a Docker container
 
-To verify, run:
+3. Verify deployment:
+
 ```bash
 docker ps
 ```
+
 Expected output:
-```bash
+```
 CONTAINER ID   IMAGE       COMMAND     STATUS    PORTS           NAMES
 xxxxxxxxxxxx   minio/minio "..."       Up       0.0.0.0:9000->9000/tcp   minio
 ```
 
-### 7️⃣ Access MinIO
-Visit: [http://localhost:9000](http://localhost:9000)
+4. Access MinIO:
+   - URL: [http://localhost:9001](http://localhost:9001)
+   - Username: `minioadmin`
+   - Password: `minioadmin`
 
-Credentials:
-- **Username:** `minioadmin`
-- **Password:** `minioadmin`
+## 🔒 NGINX Configuration
 
-## 🛠 Troubleshooting
-### Issue: `ModuleNotFoundError: No module named 'pulumi_docker'`
-#### Solution:
-1. Ensure you are inside the `infra` directory.
-2. Activate the virtual environment:
-   ```bash
-   source venv/bin/activate
-   ```
-3. Reinstall Pulumi Docker provider:
-   ```bash
-   pip install pulumi_docker
-   ```
-4. Verify installation:
-   ```bash
-   pip list | grep pulumi_docker
-   ```
-5. Try running `pulumi up` again.
+### SSL Certificate Generation
 
-### Issue: Pulumi asks for a passphrase
-Pulumi encrypts secrets. If prompted:
-```bash
-Enter your passphrase to unlock config/secrets:
-```
-You can set an environment variable to avoid re-entering:
-```bash
-export PULUMI_CONFIG_PASSPHRASE="your-passphrase"
-```
+1. Create an OpenSSL config file (`cert.conf`):
 
-### Cleanup Resources
-To destroy the infrastructure:
-```bash
-pulumi destroy
-```
-
-
-# Setting Up NGINX and Static Site
-
-## 1. Generate a Self-Signed Certificate with SAN
-
-### Create an OpenSSL config file (cert.conf):
 ```ini
 [req]
 default_bits       = 2048
@@ -196,7 +202,8 @@ basicConstraints = critical, CA:true
 DNS.1 = minio.local
 ```
 
-### Generate the certificate and key:
+2. Generate the certificate and key:
+
 ```bash
 openssl req -x509 -nodes -days 365 \  
   -newkey rsa:2048 \  
@@ -205,67 +212,12 @@ openssl req -x509 -nodes -days 365 \
   -config cert.conf
 ```
 
-This generates:
-- `minio.crt` (certificate)
-- `minio.key` (private key)
+### Reverse Proxy Setup
 
-## 2. Update NGINX Container to Use the New Certificate
+#### Option 1: Subpath Routing
 
-Replace the old `minio.crt` and `minio.key` in:
-```bash
-/home/arjun/Home-Lab/Pulumi/homelab-minicloud/infra/nginx/ssl/
-```
-Then re-run `pulumi up` to restart the stack with the SAN-enabled certificate.
+Configure NGINX to serve both MinIO console and static site under different paths:
 
-## 3. Handling Self-Signed Certificate Issues
-
-### Option 1: Use `--insecure` Flag (Not Recommended for Production)
-Update your script in `ci/upload-to-minio.sh` :
-```bash
-#!/bin/bash
-
-set -e
-
-mc alias set local https://minio.local minioadmin minioadmin --insecure
-mc mb local/static-site --insecure || true
-mc anonymous set download local/static-site --insecure
-mc cp --recursive ../static-site/ local/static-site --insecure
-
-echo "✅ Static site uploaded to MinIO!"
-```
-
-### Option 2: Trust the Self-Signed Certificate (Recommended)
-
-#### Ubuntu/Debian:
-```bash
-sudo cp minio.crt /usr/local/share/ca-certificates/minio.crt
-sudo update-ca-certificates
-```
-
-#### RedHat-based:
-```bash
-sudo cp minio.crt /etc/pki/ca-trust/source/anchors/minio.crt
-sudo update-ca-trust extract
-```
-Restart your terminal and try the script **without** `--insecure`.
-
-## 4. Serve Static Site Automatically
-
-### Using `mc`:
-```bash
-mc alias set local https://minio.local
-mc anonymous set download local/static-site
-mc website set local/static-site --index index.html --error index.html
-```
-Now access your site at:
-```bash
-https://minio.local/static-site/
-```
-
-## 5. Setting Up NGINX as a Reverse Proxy
-
-### Option 1: Subpath Routing (`/static` and `/`)
-Edit NGINX config:
 ```nginx
 server {
     listen 443 ssl;
@@ -294,16 +246,21 @@ server {
     }
 }
 ```
-Access:
-- Static site: `https://minio.local/static/`
-- MinIO Console: `https://minio.local/`
 
-### Option 2: Subdomain Split (`static.local` & `minio.local`)
-Update `/etc/hosts`:
-```bash
+Access:
+- MinIO Console: `https://minio.local/`
+- Static Site: `https://minio.local/static/`
+
+#### Option 2: Subdomain Split
+
+1. Update `/etc/hosts`:
+
+```
 127.0.0.1 minio.local static.local
 ```
-Edit NGINX config:
+
+2. Configure NGINX with separate server blocks:
+
 ```nginx
 # Static site on static.local
 server {
@@ -332,23 +289,101 @@ server {
     }
 }
 ```
-Access:
-- Static site: `https://static.local`
-- MinIO Console: `https://minio.local`
 
-## 6. Reload NGINX
+Access:
+- MinIO Console: `https://minio.local/`
+- Static Site: `https://static.local/`
+
+3. Reload NGINX configuration:
+
 ```bash
 sudo nginx -t  # Check config
 sudo systemctl reload nginx
 ```
 
-Now your static site and MinIO console are correctly routed!
+## 🌐 Static Site Deployment
 
+### Uploading to MinIO
 
+Create a script (`ci/upload-to-minio.sh`):
 
- 
- 
+```bash
+#!/bin/bash
+
+set -e
+
+mc alias set local https://minio.local minioadmin minioadmin --insecure
+mc mb local/static-site --insecure || true
+mc anonymous set download local/static-site --insecure
+mc cp --recursive ../static-site/ local/static-site --insecure
+
+echo "✅ Static site uploaded to MinIO!"
+```
+
+### Handling Self-Signed Certificates
+
+#### Option 1: Use `--insecure` Flag (Development Only)
+The script above uses the `--insecure` flag to bypass certificate validation.
+
+#### Option 2: Trust the Self-Signed Certificate (Recommended)
+
+For Ubuntu/Debian:
+```bash
+sudo cp minio.crt /usr/local/share/ca-certificates/minio.crt
+sudo update-ca-certificates
+```
+
+For RedHat-based systems:
+```bash
+sudo cp minio.crt /etc/pki/ca-trust/source/anchors/minio.crt
+sudo update-ca-trust extract
+```
+
+### Website Configuration
+
+Configure MinIO for website hosting:
+
+```bash
+mc alias set local https://minio.local
+mc anonymous set download local/static-site
+mc website set local/static-site --index index.html --error index.html
+```
+
+## 🔍 Troubleshooting
+
+### Issue: Missing Pulumi Docker Module
+
+If you see: `ModuleNotFoundError: No module named 'pulumi_docker'`
+
+Solution:
+1. Ensure you're in the `infra` directory
+2. Activate the virtual environment: `source venv/bin/activate`
+3. Reinstall the Pulumi Docker provider: `pip install pulumi_docker`
+4. Verify installation: `pip list | grep pulumi_docker`
+5. Try running `pulumi up` again
+
+### Issue: Pulumi Passphrase Prompt
+
+If Pulumi continually asks for a passphrase:
+
+```bash
+export PULUMI_CONFIG_PASSPHRASE="your-passphrase"
+```
+
+## 🧹 Cleanup
+
+To destroy all resources created by Pulumi:
+
+```bash
+pulumi destroy
+```
 
 ---
-This guide ensures a smooth setup for deploying MinIO using Pulumi. 🚀
 
+## 🤝 Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+## 📝 License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
