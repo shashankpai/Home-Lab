@@ -1,0 +1,11 @@
+name: homelab-minicloud
+description: pulumi + minio + nginx
+runtime:
+  name: python
+  options:
+    toolchain: pip
+    virtualenv: venv
+config:
+  pulumi:tags:
+    value:
+      pulumi:template: python
